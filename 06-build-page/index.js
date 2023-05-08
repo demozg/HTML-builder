@@ -1,115 +1,105 @@
 const fs = require('fs');
 const path = require('path');
-
 const fsPromises = fs.promises;
 
 const ASSETS = 'assets';
 const STYLES = 'styles';
 const PROJECT_DIST = 'project-dist';
 
-const EXTS = {
+const FORMATS = {
   HTML: '.html',
   CSS: '.css',
 };
 
-const DESTINATION_FILE_NAMES = {
+const DEFAULT_FILE_NAMES = {
   TEMPLATE: 'index',
   STYLE: 'style',
 };
 
-const buildTemplateHTML = async () => {
-  let templateContent = await fsPromises.readFile(
+const createTemplateHTML = async () => {
+  let templateInner = await fsPromises.readFile(
     path.resolve(__dirname, 'template.html'),
     'utf-8'
   );
 
-  /**
-   * example almost the same Reg
-   * @see https://ru.stackoverflow.com/questions/1257512/regexp-%D0%BF%D0%BE%D0%BB%D1%83%D1%87%D0%B8%D1%82%D1%8C-%D0%BB%D1%8E%D0%B1%D0%BE%D0%B5-%D0%B7%D0%BD%D0%B0%D1%87%D0%B5%D0%BD%D0%B8%D0%B5-%D0%BC%D0%B5%D0%B6%D0%B4%D1%83-%D1%81%D0%B8%D0%BC%D0%B2%D0%BE%D0%BB%D0%B0%D0%BC%D0%B8-%D1%81-%D1%81%D0%B0%D0%BC%D0%B8%D0%BC%D0%B8-%D1%81%D0%B8%D0%BC%D0%B2%D0%BE%D0%BB%D0%B0%D0%BC%D0%B8
-   */
   const reg = /{{[^{]+(?:_[^}]+)*}}/g;
-  const components = templateContent.match(reg);
+  const components = templateInner.match(reg);
 
   components?.forEach(async (component, index) => {
     const componentPath = path.resolve(
       __dirname,
       'components',
-      `${component.split(/{{|}}/g)?.[1]}${EXTS.HTML}`
+      `${component.split(/{{|}}/g)?.[1]}${FORMATS.HTML}`
     );
 
-    const componentContent = await fsPromises.readFile(componentPath, 'utf-8');
-    templateContent = templateContent.replace(component, componentContent);
+    const componentInner = await fsPromises.readFile(componentPath, 'utf-8');
+    templateInner = templateInner.replace(component, componentInner);
 
     if (index === components.length - 1) {
       await fsPromises.writeFile(
         path.resolve(
           __dirname,
           PROJECT_DIST,
-          `${DESTINATION_FILE_NAMES.TEMPLATE}${EXTS.HTML}`
+          `${DEFAULT_FILE_NAMES.TEMPLATE}${FORMATS.HTML}`
         ),
-        templateContent,
+        templateInner,
         'utf-8'
       );
     }
   });
 };
 
-const mergeStyles = async () => {
-  const getFiles = async (partOfPath) => {
-    const dirents = await fsPromises.readdir(path.join(__dirname, partOfPath), {
+const joinStyles = async () => {
+  const filesList = async (partOfPath) => {
+    const strings = await fsPromises.readdir(path.join(__dirname, partOfPath), {
       withFileTypes: true,
     });
 
     const filesPathes = await Promise.all(
-      dirents.map((dirent) => {
-        const direntPath = path.join(partOfPath, dirent.name);
+      strings.map((string) => {
+        const stringPath = path.join(partOfPath, string.name);
 
-        if (dirent.isDirectory()) {
-          return getFiles(direntPath);
+        if (string.isDirectory()) {
+          return filesList(stringPath);
         }
 
-        const fullFilePath = path.resolve(__dirname, direntPath);
-        const pathInfo = path.parse(fullFilePath);
-
-        return pathInfo.ext === EXTS.CSS && fullFilePath;
+        const finishFilePath = path.resolve(__dirname, stringPath);
+        const pathDetails = path.parse(finishFilePath);
+        return pathDetails.ext === FORMATS.CSS && finishFilePath;
       })
     );
-
     return Array.prototype.concat(...filesPathes).filter(Boolean);
   };
 
-  const cssFilesPathes = await getFiles(STYLES);
-
+  const cssFilesList = await filesList(STYLES);
   const writeStream = fs.createWriteStream(
     path.resolve(
       __dirname,
       PROJECT_DIST,
-      `${DESTINATION_FILE_NAMES.STYLE}${EXTS.CSS}`
+      `${DEFAULT_FILE_NAMES.STYLE}${FORMATS.CSS}`
     )
   );
 
-  cssFilesPathes.forEach((cssFilePath) => {
+  cssFilesList.forEach((cssFilePath) => {
     const readStream = fs.createReadStream(cssFilePath, {
       encoding: 'utf-8',
     });
-
     readStream.pipe(writeStream);
   });
 };
 
-const transferAssets = async () => {
+const removeAssets = async () => {
   await fsPromises.mkdir(path.resolve(__dirname, PROJECT_DIST, ASSETS));
-
-  const dirents = await fsPromises.readdir(path.resolve(__dirname, ASSETS), {
+  const strings = await fsPromises.readdir(path.resolve(__dirname, ASSETS), {
     withFileTypes: true,
   });
 
-  const transferFolder = async (assetsPartPath) => {
+  const removeFolder = async (assetsPartPath) => {
     await fsPromises.mkdir(
       path.resolve(__dirname, PROJECT_DIST, assetsPartPath)
     );
 
-    const dirents = await fsPromises.readdir(
+    const strings = await fsPromises.readdir(
       path.resolve(__dirname, assetsPartPath),
       {
         withFileTypes: true,
@@ -117,32 +107,31 @@ const transferAssets = async () => {
     );
 
     await Promise.all(
-      dirents.map((dirent) => {
-        const direntPath = path.join(assetsPartPath, dirent.name);
+      strings.map((string) => {
+        const stringPath = path.join(assetsPartPath, string.name);
 
-        if (dirent.isDirectory()) {
-          return transferFolder(direntPath);
+        if (string.isDirectory()) {
+          return removeFolder(stringPath);
         }
 
         fsPromises.copyFile(
-          path.resolve(__dirname, direntPath),
-          path.resolve(__dirname, PROJECT_DIST, direntPath)
+          path.resolve(__dirname, stringPath),
+          path.resolve(__dirname, PROJECT_DIST, stringPath)
         );
       })
     );
   };
 
   await Promise.all(
-    dirents.map((dirent) => {
-      const direntPath = path.join(ASSETS, dirent.name);
-
-      if (dirent.isDirectory()) {
-        return transferFolder(path.join(direntPath));
+    strings.map((string) => {
+      const stringPath = path.join(ASSETS, string.name);
+      if (string.isDirectory()) {
+        return removeFolder(path.join(stringPath));
       }
 
       fsPromises.copyFile(
-        path.resolve(__dirname, direntPath),
-        path.resolve(__dirname, PROJECT_DIST, direntPath)
+        path.resolve(__dirname, stringPath),
+        path.resolve(__dirname, PROJECT_DIST, stringPath)
       );
     })
   );
@@ -150,7 +139,6 @@ const transferAssets = async () => {
 
 (async () => {
   const projectDistPath = path.resolve(__dirname, PROJECT_DIST);
-
   await fsPromises.rm(projectDistPath, {
     force: true,
     recursive: true,
@@ -158,7 +146,7 @@ const transferAssets = async () => {
 
   await fsPromises.mkdir(projectDistPath);
 
-  await Promise.all([buildTemplateHTML(), mergeStyles(), transferAssets()]);
+  await Promise.all([createTemplateHTML(), joinStyles(), removeAssets()]);
 
   console.log('All done!');
 })();
