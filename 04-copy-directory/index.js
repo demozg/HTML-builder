@@ -5,12 +5,12 @@ const fsPromises = fs.promises;
 const filesList = async (folderName) => {
   const strings = await fsPromises.readdir(folderName, { withFileTypes: true });
   const files = await Promise.all(
-    strings.map((string) => {
-      if (string.isDirectory()) {
-        const folderPath = path.resolve(folderName, string.name);
+    strings.map((dirent) => {
+      if (dirent.isDirectory()) {
+        const folderPath = path.resolve(folderName, dirent.name);
         return filesList(folderPath);
       }
-      return string;
+      return dirent;
     })
   );
   return Array.prototype.concat(...files);
@@ -22,14 +22,14 @@ const checkSelectFile = async (checkedFilePath, selectType) => {
   try {
     await fsPromises.access(
       checkedFilePath,
-      fs.constants
+      fs.constants.R_OK | fs.constants.W_OK
     );
 
     if (isFolder) {
       const strings = await filesList(checkedFilePath);
       await Promise.all(
-        strings.map((string) => {
-          fsPromises.unlink(path.resolve(checkedFilePath, string.name));
+        strings.map((dirent) => {
+          fsPromises.unlink(path.resolve(checkedFilePath, dirent.name));
         })
       );
     }
@@ -47,10 +47,10 @@ checkSelectFile(path.resolve(__dirname, 'files-copy'), 'folder')
     const strings = await filesList(sourseFolderPath);
 
     await Promise.all(
-      strings.map((string) => {
+      strings.map((dirent) => {
         fsPromises.copyFile(
-          path.resolve(sourseFolderPath, string.name),
-          path.resolve(destinationFolderPath, string.name)
+          path.resolve(sourseFolderPath, dirent.name),
+          path.resolve(destinationFolderPath, dirent.name)
         );
       })
     );
